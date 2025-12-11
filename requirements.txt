@@ -1,0 +1,10 @@
+sqlalchemy
+pydantic
+pydantic_settings
+dotenv
+psycopg2-binary
+python-dateutil
+streamlit
+pandas
+plotly
+streamlit-autorefresh

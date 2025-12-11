@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: wb_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "6823:5432"
+
+  app:
+    build: .
+    container_name: wb_app
+    restart: always
+    env_file: .env
+    depends_on:
+      - postgres
+    ports:
+      - "${STREAMLIT_PORT}:8501"
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./wb:/app/wb
+      - ./dashboard:/app/dashboard
+
+volumes:
+  pg_data:
