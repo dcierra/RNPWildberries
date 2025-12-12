@@ -349,109 +349,73 @@ WHERE (nl.rn = 1);
 """,
         # 13
         "sum_for_logistics": """
-CREATE OR REPLACE VIEW sum_for_logistics AS
-WITH volume_by_liter AS (
-    SELECT t.nm_id,
-           (((avg(t.length) * avg(t.width)) * avg(t.height)) / (1000)::numeric) AS total_volume_by_item,
-           ((((avg(t.length) * avg(t.width)) * avg(t.height)) / (1000)::numeric) - (1)::numeric) AS volume_add_liter
-    FROM (
-        SELECT nmids_list.id,
-               nmids_list.nm_id,
-               nmids_list.imt_id,
-               nmids_list.nm_uuid,
-               nmids_list.subject_id,
-               nmids_list.subject_name,
-               nmids_list.vendor_code,
-               nmids_list.brand,
-               nmids_list.title,
-               nmids_list.barcode,
-               nmids_list.tech_size,
-               nmids_list.wb_size,
-               nmids_list.length,
-               nmids_list.width,
-               nmids_list.height,
-               nmids_list.created_at,
-               nmids_list.updated_at,
-               row_number() OVER (
-                 PARTITION BY nmids_list.barcode
-                 ORDER BY nmids_list.updated_at DESC
-               ) AS rn
-        FROM nmids_list
-    ) t
-    WHERE (t.rn = 1)
-    GROUP BY t.nm_id
-),
-avg_wb_tariffs_box AS (
-    SELECT tariffs_box.warehouse_name,
-           avg(tariffs_box.box_delivery_base) AS avg_box_delivery_base,
-           avg(tariffs_box.box_delivery_liter) AS avg_box_delivery_liter
-    FROM tariffs_box
-    GROUP BY tariffs_box.warehouse_name
-),
-logistics_by_warehouse_and_item AS (
-    SELECT pob.date AS date_on,
-           pob.supplierarticle AS sa_article,
-           pob.nm_id,
-           pob.warehouse_name,
-           pob.warehouse_type,
-           pob.count_orders,
-           pob.count_cancel_orders,
-           pob.count_sales,
-           pob.count_return_sales,
-           vbl.total_volume_by_item,
-           vbl.volume_add_liter,
-           COALESCE(wb_seller.box_delivery_base,
-                    wb_wb.box_delivery_base,
-                    avg_wb.avg_box_delivery_base,
-                    avg_seller.avg_box_delivery_base) AS box_delivery_base,
-           COALESCE(wb_seller.box_delivery_liter,
-                    wb_wb.box_delivery_liter,
-                    avg_wb.avg_box_delivery_liter,
-                    avg_seller.avg_box_delivery_liter) AS box_delivery_liter,
-           ((50)::numeric * ((1)::numeric - rp7.redemption_percentage)) AS reverse_logistics,
-           (((COALESCE(wb_seller.box_delivery_base,
-                        wb_wb.box_delivery_base,
-                        avg_wb.avg_box_delivery_base,
-                        avg_seller.avg_box_delivery_base)
-             + (COALESCE(wb_seller.box_delivery_liter,
-                        wb_wb.box_delivery_liter,
-                        avg_wb.avg_box_delivery_liter,
-                        avg_seller.avg_box_delivery_liter)
-               * (vbl.volume_add_liter)::double precision))
-            + (((50)::numeric * ((1)::numeric - rp7.redemption_percentage)))::double precision)
-           * (pob.count_orders)::double precision) AS all_logistics
-    FROM ((((((view_wb_percent_of_buy_with_warehouse_type pob
-            LEFT JOIN volume_by_liter vbl
-              ON ((pob.nm_id = vbl.nm_id)))
-           LEFT JOIN tariffs_box wb_seller
-             ON ((((wb_seller.warehouse_name)::text ~~ 'Маркетплейс%'::text)
-                  AND ((pob.warehouse_type)::text = 'Склад продавца'::text)
-                  AND (wb_seller.upload_at = pob.date))))
-          LEFT JOIN tariffs_box wb_wb
-             ON ((((wb_wb.warehouse_name)::text = (pob.warehouse_name)::text)
-                  AND ((pob.warehouse_type)::text = 'Склад WB'::text)
-                  AND (wb_wb.upload_at = pob.date))))
-         LEFT JOIN avg_wb_tariffs_box avg_wb
-           ON ((((avg_wb.warehouse_name)::text = (pob.warehouse_name)::text)
-                AND ((pob.warehouse_type)::text = 'Склад WB'::text))))
-         CROSS JOIN avg_wb_tariffs_box avg_seller)
-         LEFT JOIN view_wb_redemption_percentage_dynamic_7day rp7
-           ON (((pob.nm_id = rp7.nm_id)
-                AND (pob.date = rp7.date_on))))
-    WHERE ((avg_seller.warehouse_name)::text ~~ 'Маркетплейс%'::text)
-)
-SELECT l.date_on,
-       l.sa_article,
-       l.nm_id,
-       sum(l.all_logistics) AS all_logistics,
-       sum(l.count_sales) AS count_sales,
-       sum(l.count_return_sales) AS count_return_sales,
-       sum(l.count_orders) AS count_orders,
-       rp.redemption_percentage
-FROM (logistics_by_warehouse_and_item l
-  LEFT JOIN view_wb_redemption_percentage_by_30_days rp
-    ON ((rp.nm_id = l.nm_id)))
-GROUP BY l.date_on, l.sa_article, l.nm_id, rp.redemption_percentage;
+CREATE OR REPLACE VIEW public.sum_for_logistics
+AS WITH volume_by_liter AS (
+         SELECT t.nm_id,
+            avg(t.length) * avg(t.width) * avg(t.height) / 1000::numeric AS total_volume_by_item,
+            avg(t.length) * avg(t.width) * avg(t.height) / 1000::numeric - 1::numeric AS volume_add_liter
+           FROM ( SELECT nmids_list.id,
+                    nmids_list.nm_id,
+                    nmids_list.imt_id,
+                    nmids_list.nm_uuid,
+                    nmids_list.subject_id,
+                    nmids_list.subject_name,
+                    nmids_list.vendor_code,
+                    nmids_list.brand,
+                    nmids_list.title,
+                    nmids_list.barcode,
+                    nmids_list.tech_size,
+                    nmids_list.wb_size,
+                    nmids_list.length,
+                    nmids_list.width,
+                    nmids_list.height,
+                    nmids_list.created_at,
+                    nmids_list.updated_at,
+                    row_number() OVER (PARTITION BY nmids_list.barcode ORDER BY nmids_list.updated_at DESC) AS rn
+                   FROM nmids_list) t
+          WHERE t.rn = 1
+          GROUP BY t.nm_id
+        ), avg_wb_tariffs_box AS (
+         SELECT tariffs_box.warehouse_name,
+            avg(tariffs_box.box_delivery_base) AS avg_box_delivery_base,
+            avg(tariffs_box.box_delivery_liter) AS avg_box_delivery_liter
+           FROM tariffs_box
+          GROUP BY tariffs_box.warehouse_name
+        ), logistics_by_warehouse_and_item AS (
+         SELECT pob.date AS date_on,
+            pob.supplierarticle AS sa_article,
+            pob.nm_id,
+            pob.warehouse_name,
+            pob.warehouse_type,
+            pob.count_orders,
+            pob.count_cancel_orders,
+            pob.count_sales,
+            pob.count_return_sales,
+            vbl.total_volume_by_item,
+            vbl.volume_add_liter,
+            COALESCE(wb_seller.box_delivery_base, wb_wb.box_delivery_base, avg_wb.avg_box_delivery_base) AS box_delivery_base,
+            COALESCE(wb_seller.box_delivery_liter, wb_wb.box_delivery_liter, avg_wb.avg_box_delivery_liter) AS box_delivery_liter,
+            50::numeric * (1::numeric - rp7.redemption_percentage) AS reverse_logistics,
+            (COALESCE(wb_seller.box_delivery_base, wb_wb.box_delivery_base, avg_wb.avg_box_delivery_base) + COALESCE(wb_seller.box_delivery_liter, wb_wb.box_delivery_liter, avg_wb.avg_box_delivery_liter) * vbl.volume_add_liter::double precision + (50::numeric * (1::numeric - rp7.redemption_percentage))::double precision) * pob.count_orders::double precision AS all_logistics
+           FROM view_wb_percent_of_buy_with_warehouse_type pob
+             LEFT JOIN volume_by_liter vbl ON pob.nm_id = vbl.nm_id
+             LEFT JOIN tariffs_box wb_seller ON wb_seller.warehouse_name::text ~~ 'Маркетплейс%'::text AND pob.warehouse_type::text = 'Склад продавца'::text AND wb_seller.upload_at = pob.date
+             LEFT JOIN tariffs_box wb_wb ON wb_wb.warehouse_name::text = pob.warehouse_name::text AND pob.warehouse_type::text = 'Склад WB'::text AND wb_wb.upload_at = pob.date
+             LEFT JOIN avg_wb_tariffs_box avg_wb ON avg_wb.warehouse_name::text = pob.warehouse_name::text AND pob.warehouse_type::text = 'Склад WB'::text
+             LEFT JOIN view_wb_redemption_percentage_dynamic_7day rp7 ON pob.nm_id = rp7.nm_id AND pob.date = rp7.date_on
+        )
+ SELECT l.date_on,
+    l.sa_article,
+    l.nm_id,
+    sum(l.all_logistics) AS all_logistics,
+    sum(l.count_sales) AS count_sales,
+    sum(l.count_return_sales) AS count_return_sales,
+    sum(l.count_orders) AS count_orders,
+    rp.redemption_percentage
+   FROM logistics_by_warehouse_and_item l
+     LEFT JOIN view_wb_redemption_percentage_by_30_days rp ON rp.nm_id = l.nm_id
+  GROUP BY l.date_on, l.sa_article, l.nm_id, rp.redemption_percentage
+  ORDER BY l.date_on DESC;
 """,
         # 14
         "view_wb_advert_nm_report_union_djem": """
