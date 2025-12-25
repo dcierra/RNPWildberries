@@ -284,33 +284,6 @@ with table_monitor_block:
 st.title('📊 Wildberries Дашборд')
 
 
-# Получение инфо о продавце
-@st.cache_data(ttl=3600)
-def get_seller_info():
-    try:
-        wb = WBApi()
-        info = wb.seller_info()
-        return info
-    except:
-        return None
-
-
-seller_info = get_seller_info()
-if seller_info:
-    st.markdown('---')
-    with st.expander('ℹ️ Информация о продавце'):
-        info_col1, info_col2, info_col3 = st.columns(3)
-
-        with info_col1:
-            st.metric('Наименование продавца', seller_info.get('name'))
-
-        with info_col2:
-            st.metric('Уникальный ID продавца на Wildberries', seller_info.get('sid'))
-
-        with info_col3:
-            st.metric('Торговое наименование продавца', seller_info.get('tradeMark'))
-
-
 def get_dashboard_data():
     session = get_session()
     try:
@@ -485,12 +458,6 @@ date_range = st.sidebar.date_input(
     max_value=max_date
 )
 
-brands = st.sidebar.multiselect(
-    'Бренды',
-    df['brand_name'].dropna().unique(),
-    default=df['brand_name'].dropna().unique()[:5] if len(df['brand_name'].dropna().unique()) > 0 else []
-)
-
 subjects = st.sidebar.multiselect(
     'Категории товаров',
     df['tc.subject_name'].dropna().unique(),
@@ -504,9 +471,6 @@ if date_range:
     start_date = pd.to_datetime(date_range[0])
     end_date = pd.to_datetime(date_range[-1]) + timedelta(days=1)
     filtered_df = filtered_df[(filtered_df["nm_rep.date_on"] >= start_date) & (filtered_df["nm_rep.date_on"] < end_date)]
-
-if brands:
-    filtered_df = filtered_df[filtered_df['brand_name'].isin(brands)]
 
 if subjects:
     filtered_df = filtered_df[filtered_df['tc.subject_name'].isin(subjects)]
